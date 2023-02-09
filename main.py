@@ -63,8 +63,8 @@ def get_parser(**parser_kwargs):
         nargs="*",
         metavar="base_config.yaml",
         help="paths to base configs. Loaded from left-to-right. "
-             "Parameters can be overwritten or added with command-line options of the form `--key value`.",
-        default=list(),
+        "Parameters can be overwritten or added with command-line options of the form `--key value`.",
+        default=[],
     )
     parser.add_argument(
         "-t",
@@ -169,7 +169,7 @@ class DataModuleFromConfig(pl.LightningDataModule):
                  shuffle_val_dataloader=False):
         super().__init__()
         self.batch_size = batch_size
-        self.dataset_configs = dict()
+        self.dataset_configs = {}
         self.num_workers = num_workers if num_workers is not None else batch_size * 2
         self.use_worker_init_fn = use_worker_init_fn
         if train is not None:
@@ -191,9 +191,10 @@ class DataModuleFromConfig(pl.LightningDataModule):
             instantiate_from_config(data_cfg)
 
     def setup(self, stage=None):
-        self.datasets = dict(
-            (k, instantiate_from_config(self.dataset_configs[k]))
-            for k in self.dataset_configs)
+        self.datasets = {
+            k: instantiate_from_config(self.dataset_configs[k])
+            for k in self.dataset_configs
+        }
         if self.wrap:
             for k in self.datasets:
                 self.datasets[k] = WrappedDataset(self.datasets[k])
@@ -204,9 +205,14 @@ class DataModuleFromConfig(pl.LightningDataModule):
             init_fn = worker_init_fn
         else:
             init_fn = None
-        return DataLoader(self.datasets["train"], batch_size=self.batch_size,
-                          num_workers=self.num_workers, shuffle=False if is_iterable_dataset else True,
-                          worker_init_fn=init_fn, persistent_workers=True)
+        return DataLoader(
+            self.datasets["train"],
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=not is_iterable_dataset,
+            worker_init_fn=init_fn,
+            persistent_workers=True,
+        )
 
     def _val_dataloader(self, shuffle=False):
         if isinstance(self.datasets['validation'], Txt2ImgIterableBaseDataset) or self.use_worker_init_fn:
@@ -259,31 +265,36 @@ class SetupCallback(Callback):
             trainer.save_checkpoint(ckpt_path)
 
     def on_pretrain_routine_start(self, trainer, pl_module):
-        if trainer.global_rank == 0:
+        if trainer.global_rank != 0:
+            return
             # Create logdirs and save configs
             # os.makedirs(self.logdir, exist_ok=True)
             # os.makedirs(self.ckptdir, exist_ok=True)
             # os.makedirs(self.cfgdir, exist_ok=True)
 
-            if "callbacks" in self.lightning_config:
-                if 'metrics_over_trainsteps_checkpoint' in self.lightning_config['callbacks']:
-                    os.makedirs(os.path.join(self.ckptdir, 'trainstep_checkpoints'), exist_ok=True)
-            print("Project config")
-            print(OmegaConf.to_yaml(self.config))
-            OmegaConf.save(self.config,
-                           os.path.join(self.cfgdir, "{}-project.yaml".format(self.now)))
+        if (
+            "callbacks" in self.lightning_config
+            and 'metrics_over_trainsteps_checkpoint'
+            in self.lightning_config['callbacks']
+        ):
+            os.makedirs(os.path.join(self.ckptdir, 'trainstep_checkpoints'), exist_ok=True)
+        print("Project config")
+        print(OmegaConf.to_yaml(self.config))
+        OmegaConf.save(
+            self.config, os.path.join(self.cfgdir, f"{self.now}-project.yaml")
+        )
 
-            print("Lightning config")
-            print(OmegaConf.to_yaml(self.lightning_config))
-            OmegaConf.save(OmegaConf.create({"lightning": self.lightning_config}),
-                           os.path.join(self.cfgdir, "{}-lightning.yaml".format(self.now)))
+        print("Lightning config")
+        print(OmegaConf.to_yaml(self.lightning_config))
+        OmegaConf.save(
+            OmegaConf.create({"lightning": self.lightning_config}),
+            os.path.join(self.cfgdir, f"{self.now}-lightning.yaml"),
+        )
 
 def get_world_size():
     if not dist.is_available():
         return 1
-    if not dist.is_initialized():
-        return 1
-    return dist.get_world_size()
+    return dist.get_world_size() if dist.is_initialized() else 1
 
 def all_gather(data):
     """
@@ -316,12 +327,10 @@ def all_gather(data):
     size_list = [int(size.item()) for size in size_list]
     max_size = max(size_list)
 
-    # receiving Tensor from all ranks
-    # we pad the tensor because torch all_gather does not support
-    # gathering tensors of different shapes
-    tensor_list = []
-    for _ in size_list:
-        tensor_list.append(torch.FloatTensor(size=(max_size,)).cuda().to(tensor_type))
+    tensor_list = [
+        torch.FloatTensor(size=(max_size,)).cuda().to(tensor_type)
+        for _ in size_list
+    ]
     if local_size != max_size:
         padding = torch.FloatTensor(size=(max_size - local_size,)).cuda().to(tensor_type)
         tensor = torch.cat((tensor, padding), dim=0)
@@ -336,17 +345,16 @@ def all_gather(data):
             buffer = tensor[:size]
             data_list.append(buffer)
 
-    if origin_size is not None:
-        new_shape = [-1] + list(origin_size[1:])
-        resized_list = []
-        for data in data_list:
-            # suppose the difference of tensor size exist in first dimension
-            data = data.reshape(new_shape)
-            resized_list.append(data)
-
-        return resized_list
-    else:
+    if origin_size is None:
         return data_list
+    new_shape = [-1] + list(origin_size[1:])
+    resized_list = []
+    for data in data_list:
+        # suppose the difference of tensor size exist in first dimension
+        data = data.reshape(new_shape)
+        resized_list.append(data)
+
+    return resized_list
 
 class ImageLogger(Callback):
     def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=True,
@@ -365,7 +373,7 @@ class ImageLogger(Callback):
         self.clamp = clamp
         self.disabled = disabled
         self.log_on_batch_idx = log_on_batch_idx
-        self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
+        self.log_images_kwargs = log_images_kwargs or {}
         self.log_first_step = log_first_step
 
     @rank_zero_only
@@ -462,9 +470,12 @@ class ImageLogger(Callback):
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if not self.disabled and pl_module.global_step > 0:
             self.log_img(pl_module, batch, batch_idx, split="val")
-        if hasattr(pl_module, 'calibrate_grad_norm'):
-            if (pl_module.calibrate_grad_norm and batch_idx % 25 == 0) and batch_idx > 0:
-                self.log_gradients(trainer, pl_module, batch_idx=batch_idx)
+        if (
+            hasattr(pl_module, 'calibrate_grad_norm')
+            and (pl_module.calibrate_grad_norm and batch_idx % 25 == 0)
+            and batch_idx > 0
+        ):
+            self.log_gradients(trainer, pl_module, batch_idx=batch_idx)
 
 
 class CUDACallback(Callback):

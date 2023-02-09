@@ -24,7 +24,7 @@ class EditDataset(Dataset):
         crop_res: int = 256,
         flip_prob: float = 0.0,
     ):
-        assert split in ("train", "val", "test")
+        assert split in {"train", "val", "test"}
         assert sum(splits) == 1
         self.path = path
         self.min_resize_res = min_resize_res
@@ -80,7 +80,7 @@ class EditDatasetEval(Dataset):
         splits: tuple[float, float, float] = (0.9, 0.05, 0.05),
         res: int = 256,
     ):
-        assert split in ("train", "val", "test")
+        assert split in {"train", "val", "test"}
         assert sum(splits) == 1
         self.path = path
         self.res = res

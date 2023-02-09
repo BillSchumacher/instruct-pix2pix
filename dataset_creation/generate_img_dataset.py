@@ -236,7 +236,7 @@ def main():
     print(f"Partition index {opt.partition} ({opt.partition + 1} / {opt.n_partitions})")
     prompts = np.array_split(list(enumerate(prompts)), opt.n_partitions)[opt.partition]
 
-    with torch.no_grad(), torch.autocast("cuda"), model.ema_scope():
+    with (torch.no_grad(), torch.autocast("cuda"), model.ema_scope()):
         uncond = model.get_learned_conditioning(2 * [""])
         sigmas = model_wrap.get_sigmas(opt.steps)
 
@@ -305,7 +305,7 @@ def main():
                 image_1 = result.pop("image_1")
                 image_0.save(prompt_dir.joinpath(f"{seed}_0.jpg"), quality=100)
                 image_1.save(prompt_dir.joinpath(f"{seed}_1.jpg"), quality=100)
-                with open(prompt_dir.joinpath(f"metadata.jsonl"), "a") as fp:
+                with open(prompt_dir.joinpath("metadata.jsonl"), "a") as fp:
                     fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
 
     print("Done.")
