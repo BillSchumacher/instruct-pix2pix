@@ -95,17 +95,16 @@ def main():
         input_image.save(args.output)
         return
 
-    with torch.no_grad(), autocast("cuda"), model.ema_scope():
-        cond = {}
-        cond["c_crossattn"] = [model.get_learned_conditioning([args.edit])]
+    with (torch.no_grad(), autocast("cuda"), model.ema_scope()):
+        cond = {"c_crossattn": [model.get_learned_conditioning([args.edit])]}
         input_image = 2 * torch.tensor(np.array(input_image)).float() / 255 - 1
         input_image = rearrange(input_image, "h w c -> 1 c h w").to(model.device)
         cond["c_concat"] = [model.encode_first_stage(input_image).mode()]
 
-        uncond = {}
-        uncond["c_crossattn"] = [null_token]
-        uncond["c_concat"] = [torch.zeros_like(cond["c_concat"][0])]
-
+        uncond = {
+            "c_crossattn": [null_token],
+            "c_concat": [torch.zeros_like(cond["c_concat"][0])],
+        }
         sigmas = model_wrap.get_sigmas(args.steps)
 
         extra_args = {

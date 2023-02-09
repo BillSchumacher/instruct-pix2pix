@@ -134,15 +134,15 @@ def main():
         )
 
     def generate(
-        input_image: Image.Image,
-        instruction: str,
-        steps: int,
-        randomize_seed: bool,
-        seed: int,
-        randomize_cfg: bool,
-        text_cfg_scale: float,
-        image_cfg_scale: float,
-    ):
+            input_image: Image.Image,
+            instruction: str,
+            steps: int,
+            randomize_seed: bool,
+            seed: int,
+            randomize_cfg: bool,
+            text_cfg_scale: float,
+            image_cfg_scale: float,
+        ):
         seed = random.randint(0, 100000) if randomize_seed else seed
         text_cfg_scale = round(random.uniform(6.0, 9.0), ndigits=2) if randomize_cfg else text_cfg_scale
         image_cfg_scale = round(random.uniform(1.2, 1.8), ndigits=2) if randomize_cfg else image_cfg_scale
@@ -154,7 +154,7 @@ def main():
         height = int((height * factor) // 64) * 64
         input_image = ImageOps.fit(input_image, (width, height), method=Image.Resampling.LANCZOS)
 
-        if instruction == "":
+        if not instruction:
             return [input_image, seed]
 
         with torch.no_grad(), autocast("cuda"), model.ema_scope():
@@ -202,7 +202,7 @@ def main():
 
         with gr.Row():
             input_image = gr.Image(label="Input Image", type="pil", interactive=True)
-            edited_image = gr.Image(label=f"Edited Image", type="pil", interactive=False)
+            edited_image = gr.Image(label="Edited Image", type="pil", interactive=False)
             input_image.style(height=512, width=512)
             edited_image.style(height=512, width=512)
 
@@ -223,8 +223,8 @@ def main():
                 show_label=False,
                 interactive=True,
             )
-            text_cfg_scale = gr.Number(value=7.5, label=f"Text CFG", interactive=True)
-            image_cfg_scale = gr.Number(value=1.5, label=f"Image CFG", interactive=True)
+            text_cfg_scale = gr.Number(value=7.5, label="Text CFG", interactive=True)
+            image_cfg_scale = gr.Number(value=1.5, label="Image CFG", interactive=True)
 
         gr.Markdown(help_text)
 

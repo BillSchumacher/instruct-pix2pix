@@ -22,12 +22,10 @@ def main(openai_model: str):
         return output
 
     def click_generate(input: str):
-        if input == "":
+        if not input:
             raise gr.Error("Input caption is missing!")
         edit_output = generate(openai_model, input)
-        if edit_output is None:
-            return "Failed :(", "Failed :("
-        return edit_output
+        return ("Failed :(", "Failed :(") if edit_output is None else edit_output
 
     with gr.Blocks(css="footer {visibility: hidden}") as demo:
         txt_input = gr.Textbox(lines=3, label="Input Caption", interactive=True, placeholder="Type image caption here...")  # fmt: skip
